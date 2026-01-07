@@ -7,7 +7,7 @@ suppressMessages({
   library(yaml)
 })
 
-load_config <- function(config_path = file.path(dirname(getwd()), "config", "pipeline_config.yaml")) {
+load_config <- function(config_path = file.path(getwd(), "config", "pipeline_config.yaml")) {
 
   if (!file.exists(config_path)) {
     warning("Configuration file not found at: ", config_path, ". Using default values.")
@@ -121,8 +121,11 @@ needs_intensity_normalization <- function(img, threshold_cv = 0.5) {
   brain_voxels <- img[img > 0]
   if (length(brain_voxels) == 0) return(FALSE)
   
-  cv <- sd(brain_voxels, na.rm = TRUE) / mean(brain_voxels, na.rm = TRUE)
-  return(cv > threshold_cv)
+  mean_val <- mean(brain_voxels, na.rm = TRUE)
+  if (mean_val == 0) return(FALSE)
+  
+  cv <- sd(brain_voxels, na.rm = TRUE) / mean_val
+  return(!is.na(cv) && cv > threshold_cv)
 }
 
 get_image_stats <- function(img, mask = NULL) {
@@ -150,7 +153,7 @@ get_image_stats <- function(img, mask = NULL) {
     n_voxels = length(voxels)
   )
   
-  stats$cv <- stats$sd / stats$mean
+  stats$cv <- if (stats$mean != 0) stats$sd / stats$mean else NA
   
   return(stats)
 }
@@ -160,12 +163,6 @@ create_brain_mask <- function(img, threshold = 0.1) {
   mask[mask > threshold] <- 1
   mask[mask <= threshold] <- 0
   return(mask)
-}
-
-apply_transformation <- function(coords, transform_matrix) {
-  homo_coords <- cbind(coords, 1)
-  transformed <- t(transform_matrix %*% t(homo_coords))
-  return(transformed[, 1:3])
 }
 
 calculate_normalized_mutual_information <- function(x, y, bins = 50) {
@@ -188,8 +185,8 @@ calculate_normalized_mutual_information <- function(x, y, bins = 50) {
   hy <- -sum(py * log(py + 1e-10))
   hxy <- -sum(joint_prob * log(joint_prob + 1e-10))
   
-  nmi <- 2 * (hx + hy - hxy) / (hx + hy)
-  return(nmi)
+  if ((hx + hy) == 0) return(NA)
+  return(2 * (hx + hy - hxy) / (hx + hy))
 }
 
 calculate_image_similarity <- function(img1, img2, mask = NULL) {
@@ -217,11 +214,17 @@ calculate_image_similarity <- function(img1, img2, mask = NULL) {
   sigma2 <- sd(vox2, na.rm = TRUE)
   sigma12 <- cov(vox1, vox2, use = "complete.obs")
   
-  c1 <- 0.01^2
-  c2 <- 0.03^2
+  L <- max(c(max(vox1, na.rm = TRUE), max(vox2, na.rm = TRUE))) - 
+       min(c(min(vox1, na.rm = TRUE), min(vox2, na.rm = TRUE)))
   
-  ssim <- ((2 * mu1 * mu2 + c1) * (2 * sigma12 + c2)) / 
-          ((mu1^2 + mu2^2 + c1) * (sigma1^2 + sigma2^2 + c2))
+  if (L == 0) {
+    ssim <- NA
+  } else {
+    c1 <- (0.01 * L)^2
+    c2 <- (0.03 * L)^2
+    denom <- (mu1^2 + mu2^2 + c1) * (sigma1^2 + sigma2^2 + c2)
+    ssim <- if (denom == 0) NA else ((2 * mu1 * mu2 + c1) * (2 * sigma12 + c2)) / denom
+  }
   
   return(list(
     correlation = correlation,
@@ -257,19 +260,3 @@ validate_registration <- function(registered_img, reference_img, mask = NULL,
     thresholds = list(min_correlation = min_correlation, max_mse = max_mse)
   ))
 }
-
-create_log_entry <- function(step_name, input_file, output_file, parameters = NULL, 
-                           quality_metrics = NULL, timestamp = Sys.time()) {
-  log_entry <- list(
-    timestamp = as.character(timestamp),
-    step = step_name,
-    input_file = input_file,
-    output_file = output_file,
-    parameters = parameters,
-    quality_metrics = quality_metrics
-  )
-  
-  return(log_entry)
-}
-
-
