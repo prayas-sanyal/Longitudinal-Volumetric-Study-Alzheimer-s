@@ -33,8 +33,6 @@ suppressMessages({
   source(file.path(script_dir, "utils.R"))
 })
 
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
 register_to_baseline <- function(moving_img, fixed_img, registration_type = "linear", 
                                 cost_function = "corratio", search_range = 90,
                                 dof = 12, interpolation = "trilinear") {
@@ -73,24 +71,26 @@ register_to_baseline <- function(moving_img, fixed_img, registration_type = "lin
       input_img <- moving_img
     }
     
-    tryCatch({
-      nonlinear_reg <- fslr::fnirt(
+    nonlinear_reg <- tryCatch({
+      fslr::fnirt(
         infile = input_img,
         reffile = fixed_img,
         retimg = TRUE
       )
-      
-      result$nonlinear_registered <- nonlinear_reg
-      result$final_registered <- nonlinear_reg
     }, error = function(e) {
       warning("Nonlinear registration failed: ", e$message)
-      if (exists("linear_reg")) {
-        message("Using linear registration result instead")
-        result$final_registered <- linear_reg
-      } else {
-        stop("Both linear and nonlinear registration failed")
-      }
+      NULL
     })
+    
+    if (!is.null(nonlinear_reg)) {
+      result$nonlinear_registered <- nonlinear_reg
+      result$final_registered <- nonlinear_reg
+    } else if (exists("linear_reg")) {
+      message("Using linear registration result instead")
+      result$final_registered <- linear_reg
+    } else {
+      stop("Both linear and nonlinear registration failed")
+    }
   }
   
   return(result)
@@ -126,11 +126,14 @@ create_registration_qc <- function(moving_img, fixed_img, registered_img, output
   png(output_path, width = 1800, height = 600)
   par(mfrow = c(1, 3), mar = c(2, 2, 3, 2))
   
-  try(ortho2(moving_img, text = "Followup Visit", xyz = c(128, 128, 170)), silent = TRUE)
+  img_dims <- dim(fixed_img)
+  center_xyz <- c(round(img_dims[1]/2), round(img_dims[2]/2), round(img_dims[3]*0.6))
   
-  try(ortho2(fixed_img, text = "Baseline", xyz = c(128, 128, 170)), silent = TRUE)
+  try(ortho2(moving_img, text = "Followup Visit", xyz = center_xyz), silent = TRUE)
   
-  try(ortho2(registered_img, text = "Registered", xyz = c(128, 128, 170)), silent = TRUE)
+  try(ortho2(fixed_img, text = "Baseline", xyz = center_xyz), silent = TRUE)
+  
+  try(ortho2(registered_img, text = "Registered", xyz = center_xyz), silent = TRUE)
   
   dev.off()
   message("Registration QC image saved: ", output_path)
@@ -181,7 +184,17 @@ process_visit_registration <- function(visit_path, baseline_path, output_dir,
   ))
 }
 
-if (!interactive()) {
+is_main_script <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("--file=", args, value = TRUE)
+  if (length(file_arg) > 0) {
+    script_name <- basename(sub("--file=", "", file_arg[1]))
+    return(script_name == "registration.R")
+  }
+  return(FALSE)
+}
+
+if (!interactive() && is_main_script()) {
   args <- commandArgs(trailingOnly = TRUE)
   
   if (length(args) < 3) {
@@ -218,7 +231,7 @@ if (!interactive()) {
   writeNIfTI(reg_result$final_registered, output_file)
   
   quality_metrics <- calculate_image_similarity(reg_result$final_registered, fixed_img)
-  quality_file <- paste0(tools::file_path_sans_ext(output_file), "_quality.csv")
+  quality_file <- paste0(sub("\\.nii(\\.gz)?$", "", output_file), "_quality.csv")
   write.csv(data.frame(
     Correlation = quality_metrics$correlation,
     NMI = quality_metrics$normalized_mutual_information,
