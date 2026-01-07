@@ -165,6 +165,7 @@ export -f process_patient
 export -f log_message
 export SKIP_CONVERSION
 export SKIP_PIPELINE
+export SCRIPT_DIR
 export RED GREEN YELLOW BLUE NC
 
 log_message "INFO" "Starting parallel processing with $MAX_PARALLEL jobs"
@@ -172,7 +173,17 @@ log_message "INFO" "Starting parallel processing with $MAX_PARALLEL jobs"
 if command -v parallel >/dev/null 2>&1; then
     printf '%s\n' "${PATIENT_DIRS[@]}" | parallel -j "$MAX_PARALLEL" process_patient
 else
-    printf '%s\n' "${PATIENT_DIRS[@]}" | xargs -n 1 -P "$MAX_PARALLEL" -I {} bash -c 'process_patient "$@"' _ {}
+    running_jobs=0
+    for patient_dir in "${PATIENT_DIRS[@]}"; do
+        (process_patient "$patient_dir") &
+        ((running_jobs++))
+        
+        if [ $running_jobs -ge "$MAX_PARALLEL" ]; then
+            wait -n 2>/dev/null || wait
+            ((running_jobs--))
+        fi
+    done
+    wait
 fi
 
 log_message "INFO" "Generating processing summary"
