@@ -47,8 +47,6 @@ suppressMessages({
   config <- load_config()
 })
 
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
 args <- commandArgs(trailingOnly = TRUE)
 patient_dir <- args[1]
 if (is.na(patient_dir)) stop("Usage: Rscript longitudinal_pipeline.R /path/to/Patient1")
@@ -68,7 +66,10 @@ visit_names <- c()
 baseline_bet <- NULL
 failed_visits <- list()
 
-for (visit in sort(visit_dirs)) {
+visit_nums <- as.numeric(gsub(".*(?i)visit([0-9]+).*", "\\1", visit_dirs, perl = TRUE))
+visit_dirs_sorted <- visit_dirs[order(visit_nums)]
+
+for (visit in visit_dirs_sorted) {
   vname <- basename(visit)
   visit_names <- c(visit_names, vname)
   message("\n== Processing ", vname, " ==")
@@ -104,14 +105,17 @@ for (visit in sort(visit_dirs)) {
   bet_img <- run_bet(norm_img, cog_init = TRUE)
   writeNIfTI(bet_img, file.path(visit_out, paste0(vname, "_BET")))
   
-  if (is.null(baseline_bet)) {
+  is_baseline_visit <- is.null(baseline_bet)
+  
+  if (is_baseline_visit) {
     baseline_bet <- bet_img
     message("Set as baseline for registration")
   }
   
-  if (!is.null(baseline_bet) && vname != "Visit1") {
+  if (!is_baseline_visit) {
     message("Registration to baseline: ")
     
+    original_bet_img <- bet_img
     brain_mask <- create_brain_mask(bet_img)
     baseline_mask <- create_brain_mask(baseline_bet)
     
@@ -191,7 +195,7 @@ for (visit in sort(visit_dirs)) {
     ), reg_quality_csv, row.names = FALSE)
     
     reg_qc_png <- file.path(visit_out, paste0(vname, "_registration_qc.png"))
-    create_registration_qc(bet_img, baseline_bet, reg_img, reg_qc_png)
+    create_registration_qc(original_bet_img, baseline_bet, reg_img, reg_qc_png)
   }
 
   message("FAST segmentation ...")
@@ -233,9 +237,12 @@ for (visit in sort(visit_dirs)) {
   par(mfrow = c(1,3), mar = c(2,2,2,2))
   mtext(paste("QC Overlay:", patient_id, "-", vname), side = 3, line = -2, outer = TRUE, cex = 1.5, font = 2)
 
-  try(ortho2(bet_img, pve_csf > config$processing$pve_threshold, col.y = alpha("red", 0.5),  text = "CSF", xyz = c(128,128,170)), silent = TRUE)
-  try(ortho2(bet_img, pve_gm  > config$processing$pve_threshold, col.y = alpha("blue", 0.5), text = "GM",  xyz = c(128,128,170)), silent = TRUE)
-  try(ortho2(bet_img, pve_wm  > config$processing$pve_threshold, col.y = alpha("green", 0.5), text = "WM",  xyz = c(128,128,170)), silent = TRUE)
+  img_dims <- dim(bet_img)
+  center_xyz <- c(round(img_dims[1]/2), round(img_dims[2]/2), round(img_dims[3]*0.6))
+  
+  try(ortho2(bet_img, pve_csf > config$processing$pve_threshold, col.y = alpha("red", 0.5),  text = "CSF", xyz = center_xyz), silent = TRUE)
+  try(ortho2(bet_img, pve_gm  > config$processing$pve_threshold, col.y = alpha("blue", 0.5), text = "GM",  xyz = center_xyz), silent = TRUE)
+  try(ortho2(bet_img, pve_wm  > config$processing$pve_threshold, col.y = alpha("green", 0.5), text = "WM",  xyz = center_xyz), silent = TRUE)
   dev.off()
 }
 
@@ -243,15 +250,19 @@ if (length(volumes) >= 1) {
   long_csv <- file.path(out_root, paste0(patient_id, "_longitudinal_volumes.csv"))
   vol_mat <- do.call(rbind, volumes)
   vol_df <- data.frame(Visit = names(volumes), vol_mat, row.names = NULL)
+  
+  visit_nums <- as.numeric(gsub("(?i)visit", "", vol_df$Visit, perl = TRUE))
+  vol_df <- vol_df[order(visit_nums), ]
+  
   write.csv(vol_df, long_csv, row.names = FALSE)
   message("\nWrote longitudinal table: ", long_csv)
 
   if (nrow(vol_df) >= 2) {
     baseline <- vol_df[1, ]
     deltas <- vol_df
-    deltas$CSF_delta_ml <- deltas$CSF_ml - baseline$CSF_ml
-    deltas$GM_delta_ml  <- deltas$GM_ml  - baseline$GM_ml
-    deltas$WM_delta_ml  <- deltas$WM_ml  - baseline$WM_ml
+    deltas$CSF_delta_ml <- round(deltas$CSF_ml - baseline$CSF_ml, 3)
+    deltas$GM_delta_ml  <- round(deltas$GM_ml  - baseline$GM_ml, 3)
+    deltas$WM_delta_ml  <- round(deltas$WM_ml  - baseline$WM_ml, 3)
     delta_csv <- file.path(out_root, paste0(patient_id, "_longitudinal_deltas.csv"))
     write.csv(deltas[, c("Visit", "CSF_delta_ml", "GM_delta_ml", "WM_delta_ml")], delta_csv, row.names = FALSE)
     message("Wrote deltas table: ", delta_csv)
