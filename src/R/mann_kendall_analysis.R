@@ -7,12 +7,14 @@
 #        If not provided, analyzes all patients in the results directory
 
 suppressMessages({
-  library(data.table)
   if (!require("data.table", quietly = TRUE)) {
     install.packages("data.table", repos = "https://cran.r-project.org/")
     library(data.table)
   }
-  library(yaml)
+  if (!require("yaml", quietly = TRUE)) {
+    install.packages("yaml", repos = "https://cran.r-project.org/")
+    library(yaml)
+  }
 })
 
 get_script_dir <- function() {
@@ -174,7 +176,7 @@ analyze_patient_mk <- function(patient_dir) {
     return(NULL)
   }
   
-  visit_order <- order(as.numeric(gsub("Visit", "", vol_data$Visit)))
+  visit_order <- order(as.numeric(gsub("(?i)visit", "", vol_data$Visit, perl = TRUE)))
   vol_data <- vol_data[visit_order, ]
   
   message("Found ", nrow(vol_data), " visits: ", paste(vol_data$Visit, collapse = ", "))
@@ -184,30 +186,24 @@ analyze_patient_mk <- function(patient_dir) {
   results_list <- list()
   
   if ("CSF_ml" %in% colnames(vol_data)) {
-    csf_result <- analyze_patient_tissue(
-      vol_data$CSF_ml, "CSF", patient_id, vol_data$Visit
-    )
+    csf_result <- analyze_patient_tissue(vol_data$CSF_ml, "CSF", patient_id, vol_data$Visit)
     results_list[["CSF"]] <- csf_result
     message("CSF: S=", csf_result$S_Statistic, ", Z=", round(csf_result$Z_Score, 3), 
-            ", p=", round(csf_result$P_Value, 4), ", confidence=", round(csf_result$Confidence_Percentage, 2), "%")
+            ", p=", round(csf_result$P_Value, 4))
   }
   
   if ("GM_ml" %in% colnames(vol_data)) {
-    gm_result <- analyze_patient_tissue(
-      vol_data$GM_ml, "GM", patient_id, vol_data$Visit
-    )
+    gm_result <- analyze_patient_tissue(vol_data$GM_ml, "GM", patient_id, vol_data$Visit)
     results_list[["GM"]] <- gm_result
     message("GM:  S=", gm_result$S_Statistic, ", Z=", round(gm_result$Z_Score, 3), 
-            ", p=", round(gm_result$P_Value, 4), ", confidence=", round(gm_result$Confidence_Percentage, 2), "%")
+            ", p=", round(gm_result$P_Value, 4))
   }
   
   if ("WM_ml" %in% colnames(vol_data)) {
-    wm_result <- analyze_patient_tissue(
-      vol_data$WM_ml, "WM", patient_id, vol_data$Visit
-    )
+    wm_result <- analyze_patient_tissue(vol_data$WM_ml, "WM", patient_id, vol_data$Visit)
     results_list[["WM"]] <- wm_result
     message("WM:  S=", wm_result$S_Statistic, ", Z=", round(wm_result$Z_Score, 3), 
-            ", p=", round(wm_result$P_Value, 4), ", confidence=", round(wm_result$Confidence_Percentage, 2), "%")
+            ", p=", round(wm_result$P_Value, 4))
   }
   
   if (length(results_list) > 0) {
