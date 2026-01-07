@@ -33,8 +33,6 @@ suppressMessages({
   source(file.path(script_dir, "utils.R"))
 })
 
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
 normalize_intensity <- function(img, method = "zscore", mask = NULL, reference_img = NULL) {
   if (!is.null(mask)) {
     brain_voxels <- img[mask > 0]
@@ -178,8 +176,17 @@ nyul_normalize <- function(img, mask = NULL) {
   return(normalized_img)
 }
 
-# Command line interface
-if (!interactive()) {
+is_main_script <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("--file=", args, value = TRUE)
+  if (length(file_arg) > 0) {
+    script_name <- basename(sub("--file=", "", file_arg[1]))
+    return(script_name == "intensity_normalization.R")
+  }
+  return(FALSE)
+}
+
+if (!interactive() && is_main_script()) {
   args <- commandArgs(trailingOnly = TRUE)
   
   if (length(args) < 2) {
