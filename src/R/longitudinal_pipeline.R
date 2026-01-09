@@ -217,10 +217,24 @@ for (visit in visit_dirs_sorted) {
   pve_gm  <- readNIfTI(pve_gm_path,  reorient = FALSE)
   pve_wm  <- readNIfTI(pve_wm_path,  reorient = FALSE)
 
-  vol_csf <- compute_volume_ml(pve_csf, threshold = config$processing$pve_threshold)
-  vol_gm  <- compute_volume_ml(pve_gm,  threshold = config$processing$pve_threshold)
-  vol_wm  <- compute_volume_ml(pve_wm,  threshold = config$processing$pve_threshold)
+  threshold <- config$processing$pve_threshold
+  nvox_csf <- sum(pve_csf > threshold)
+  nvox_gm  <- sum(pve_gm > threshold)
+  nvox_wm  <- sum(pve_wm > threshold)
+  
+  message("\nVoxel Counts (threshold > ", threshold, ")")
+  message("  CSF voxels: ", format(nvox_csf, big.mark = ","))
+  message("  GM voxels:  ", format(nvox_gm, big.mark = ","))
+  message("  WM voxels:  ", format(nvox_wm, big.mark = ","))
 
+  vol_csf <- compute_volume_ml(pve_csf, threshold = threshold)
+  vol_gm  <- compute_volume_ml(pve_gm,  threshold = threshold)
+  vol_wm  <- compute_volume_ml(pve_wm,  threshold = threshold)
+
+  message("\nTissue Volumes (ml)")
+  message("  CSF: ", round(vol_csf, 2), " ml")
+  message("  GM:  ", round(vol_gm, 2), " ml")
+  message("  WM:  ", round(vol_wm, 2), " ml")
 
   visit_csv <- file.path(visit_out, paste0(vname, "_volumes.csv"))
   write.csv(
@@ -234,8 +248,7 @@ for (visit in visit_dirs_sorted) {
 
   qc_png <- file.path(visit_out, paste0(vname, "_qc_overlay.png"))
   png(qc_png, width = 1400, height = 900)
-  par(mfrow = c(1,3), mar = c(2,2,2,2))
-  mtext(paste("QC Overlay:", patient_id, "-", vname), side = 3, line = -2, outer = TRUE, cex = 1.5, font = 2)
+  par(mfrow = c(1,3), mar = c(2,2,2,2), oma = c(0, 0, 3, 0))
 
   img_dims <- dim(bet_img)
   center_xyz <- c(round(img_dims[1]/2), round(img_dims[2]/2), round(img_dims[3]*0.6))
@@ -243,6 +256,7 @@ for (visit in visit_dirs_sorted) {
   try(ortho2(bet_img, pve_csf > config$processing$pve_threshold, col.y = alpha("red", 0.5),  text = "CSF", xyz = center_xyz), silent = TRUE)
   try(ortho2(bet_img, pve_gm  > config$processing$pve_threshold, col.y = alpha("blue", 0.5), text = "GM",  xyz = center_xyz), silent = TRUE)
   try(ortho2(bet_img, pve_wm  > config$processing$pve_threshold, col.y = alpha("green", 0.5), text = "WM",  xyz = center_xyz), silent = TRUE)
+  mtext(paste("QC Overlay:", patient_id, "-", vname), side = 3, line = 0, outer = TRUE, cex = 1.5, font = 2)
   dev.off()
 }
 
