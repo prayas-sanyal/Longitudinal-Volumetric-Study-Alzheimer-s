@@ -37,23 +37,22 @@ register_to_baseline <- function(moving_img, fixed_img, registration_type = "lin
                                 cost_function = "corratio", search_range = 90,
                                 dof = 12, interpolation = "trilinear") {
   result <- list()
+  linear_reg <- NULL
   
   if (registration_type %in% c("linear", "both")) {
     message("Performing linear registration...")
-    
-    flirt_opts <- paste(
-      "-cost", cost_function,
-      "-searchrx", -search_range, search_range,
-      "-searchry", -search_range, search_range,
-      "-searchrz", -search_range, search_range,
-      "-interp", interpolation
-    )
     
     linear_reg <- fslr::flirt(
       infile = moving_img,
       reffile = fixed_img,
       dof = dof,
-      opts = flirt_opts,
+      opts = paste(
+        "-cost", cost_function,
+        "-searchrx", -search_range, search_range,
+        "-searchry", -search_range, search_range,
+        "-searchrz", -search_range, search_range,
+        "-interp", interpolation
+      ),
       retimg = TRUE
     )
     
@@ -69,7 +68,7 @@ register_to_baseline <- function(moving_img, fixed_img, registration_type = "lin
   if (registration_type %in% c("nonlinear", "both")) {
     message("Performing nonlinear registration...")
     
-    if (exists("linear_reg")) {
+    if (!is.null(linear_reg)) {
       input_img <- linear_reg
     } else {
       input_img <- moving_img
@@ -89,7 +88,7 @@ register_to_baseline <- function(moving_img, fixed_img, registration_type = "lin
     if (!is.null(nonlinear_reg)) {
       result$nonlinear_registered <- nonlinear_reg
       result$final_registered <- nonlinear_reg
-    } else if (exists("linear_reg")) {
+    } else if (!is.null(linear_reg)) {
       message("Using linear registration result instead")
       result$final_registered <- linear_reg
     } else {
