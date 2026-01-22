@@ -41,15 +41,19 @@ register_to_baseline <- function(moving_img, fixed_img, registration_type = "lin
   if (registration_type %in% c("linear", "both")) {
     message("Performing linear registration...")
     
+    flirt_opts <- paste(
+      "-cost", cost_function,
+      "-searchrx", -search_range, search_range,
+      "-searchry", -search_range, search_range,
+      "-searchrz", -search_range, search_range,
+      "-interp", interpolation
+    )
+    
     linear_reg <- fslr::flirt(
       infile = moving_img,
       reffile = fixed_img,
       dof = dof,
-      cost = cost_function,
-      searchrx = c(-search_range, search_range),
-      searchry = c(-search_range, search_range),
-      searchrz = c(-search_range, search_range),
-      interp = interpolation,
+      opts = flirt_opts,
       retimg = TRUE
     )
     
