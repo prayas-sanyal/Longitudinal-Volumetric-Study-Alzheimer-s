@@ -83,13 +83,13 @@ Patient1/
    ./src/scripts/convert_all.sh data/
    ```
 
-3. **Process a single patient**:
+2. **Process a single patient**:
 
     ```bash
    Rscript src/R/longitudinal_pipeline.R /path/to/Patient123
    ```
 
-5. **Batch process multiple patients** (uses parallel jobs):
+3. **Batch process multiple patients** (uses parallel jobs):
 
    ```bash
    ./src/scripts/batch_process.sh -d data/ -j 4
@@ -159,7 +159,7 @@ If you only have DICOMs, run the converter first (see below).
       Visit1_BET.nii.gz                   #skull stripped (baseline)
       Visit1_BET_pve_{0,1,2}.nii.gz       #CSF/GM/WM segmentations
       Visit1_volumes.csv
-      Visit1_qc_overlay.png               #tissue segmentation QC
+      Visit1_qc_overlay.png               #tissue segmentation QC (logs ml/voxels)
     Visit2/
       Visit2_N4.nii.gz                    #bias-corrected
       Visit2_N4_norm.nii.gz               #intensity normalized
@@ -183,7 +183,7 @@ To process multiple patients in parallel:
 
 ```bash
 
-./src/scripts/batch_process.sh -d data/ -j 8 #4 recommended as this takes some time
+./src/scripts/batch_process.sh -d data/ -j 8 #4 
 
 #skip conversion of dicom to nifti if already done 
 ./src/scripts/batch_process.sh -d data/ --skip-conversion
